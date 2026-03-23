@@ -5,7 +5,7 @@ from datetime import datetime
 import csv
 import os
 
-LINE_TOKEN = "AT8/sZVSAvpq9yHtgu5cuvNlQw1mvJK4byjJM26Svi/g6TI+voMu0em4c950/QpNfW0s9rSNY7zXZDHysDxIbTidKov7J/9K033SJ0N+s9RjCJrdQBzAgVJ3g6CrLcWOyMflb84/qAjeIaBDEzdAfwdB04t89/1O/w1cDnyilFU="
+LINE_TOKEN = "xp3qfxCz2ILHsMtWnZbVMRrfnn0R1C1XxkFBrbF69KG26seKKAt7OGE8VUj5NpGcfW0s9rSNY7zXZDHysDxIbTidKov7J/9K033SJ0N+s9Sus+s4U5AnVS8MAmLm1SMXmRzQH/ERO5ogmsneL7NuHwdB04t89/1O/w1cDnyilFU="
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
