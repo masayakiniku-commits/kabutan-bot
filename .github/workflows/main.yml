@@ -1,23 +1,43 @@
-name: Run Script
+def run_screening():
+    today = datetime.today().weekday()
+    codes = get_codes()
 
-on:
-  workflow_dispatch:
+    # ======================
+    # ■ 金曜：週まとめ＋通常
+    # ======================
+    if today == 4:
+        msg = "📊週次レポート（仕込み用）\n\n"
+        msg += weekly_ranking()
+        msg += win_rate()
+        msg += next_watchlist()
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+        send_line(msg)
 
-    steps:
-      - uses: actions/checkout@v3
+    # ======================
+    # ■ 平日スクリーニング
+    # ======================
+    if today < 5:
+        if not codes:
+            send_line("本日決算なし")
+            return
 
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+        results = []
+        for c in codes:
+            rank, score = evaluate(c)
+            results.append((c, rank, score))
 
-      - run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        results.sort(key=lambda x: x[2], reverse=True)
 
-      - run: python kabutan_final.py
-        env:
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+        save_log(results)
+
+        msg = "【決算初動スクリーニング】★直後\n"
+        for r in results[:10]:
+            msg += f"{r[0]} {r[1]}({r[2]})\n"
+
+        send_line(msg)
+        return
+
+    # ======================
+    # ■ 土日：何もしない
+    # ======================
+    return
