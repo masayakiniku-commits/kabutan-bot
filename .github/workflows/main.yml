@@ -1,0 +1,21 @@
+name: Run Script
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - run: pip install -r requirements.txt
+
+      - run: python kabutan_final.py
+        env:
+          LINE_TOKEN: ${{ AT8/sZVSAvpq9yHtgu5cuvNlQw1mvJK4byjJM26Svi/g6TI+voMu0em4c950/QpNfW0s9rSNY7zXZDHysDxIbTidKov7J/9K033SJ0N+s9RjCJrdQBzAgVJ3g6CrLcWOyMflb84/qAjeIaBDEzdAfwdB04t89/1O/w1cDnyilFU= }}
