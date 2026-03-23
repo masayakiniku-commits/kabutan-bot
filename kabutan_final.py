@@ -1,13 +1,280 @@
-import os
 import requests
+from bs4 import BeautifulSoup
+import yfinance as yf
+from datetime import datetime
+import csv
+import os
 
-LINE_TOKEN = os.getenv("AT8/sZVSAvpq9yHtgu5cuvNlQw1mvJK4byjJM26Svi/g6TI+voMu0em4c950/QpNfW0s9rSNY7zXZDHysDxIbTidKov7J/9K033SJ0N+s9RjCJrdQBzAgVJ3g6CrLcWOyMflb84/qAjeIaBDEzdAfwdB04t89/1O/w1cDnyilFU=")
+LINE_TOKEN = "AT8/sZVSAvpq9yHtgu5cuvNlQw1mvJK4byjJM26Svi/g6TI+voMu0em4c950/QpNfW0s9rSNY7zXZDHysDxIbTidKov7J/9K033SJ0N+s9RjCJrdQBzAgVJ3g6CrLcWOyMflb84/qAjeIaBDEzdAfwdB04t89/1O/w1cDnyilFU="
+LOG_FILE = "trade_log.csv"
 
+# ----------------------
+# LINE送信
+# ----------------------
 def send_line(msg):
-    url = "https://notify-api.line.me/api/notify"
-    headers = {"Authorization": f"Bearer {LINE_TOKEN}"}
-    data = {"message": msg}
-    requests.post(url, headers=headers, data=data)
+    url = "https://api.line.me/v2/bot/message/broadcast"
+    headers = {
+        "Authorization": f"Bearer {LINE_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    requests.post(url, headers=headers, json={
+        "messages":[{"type":"text","text":msg}]
+    })
 
+# ----------------------
+# 決算銘柄取得
+# ----------------------
+def get_codes():
+    url = "https://kabutan.jp/warning/?mode=1_2"
+    res = requests.get(url, headers={"User-Agent":"Mozilla"})
+    soup = BeautifulSoup(res.text, "html.parser")
+
+    codes = []
+    for a in soup.find_all("a"):
+        href = a.get("href","")
+        if "/stock/" in href:
+            c = href.split("/stock/")[1].split("/")[0]
+            if c.isdigit() and len(c)==4:
+                codes.append(c)
+
+    return list(set(codes))
+
+# ----------------------
+# 200日線＋初動
+# ----------------------
+def trend_reversal(code):
+    try:
+        df = yf.Ticker(f"{code}.T").history(period="1y")
+        if len(df) < 200:
+            return 0
+
+        close = df["Close"]
+        ma200 = close.rolling(200).mean()
+        ma25 = close.rolling(25).mean()
+        ma5 = close.rolling(5).mean()
+
+        price = close.iloc[-1]
+        kairi = (price - ma200.iloc[-1]) / ma200.iloc[-1] * 100
+
+        score = 0
+        if price < ma200.iloc[-1]: score += 1
+        if -20 < kairi < -5: score += 1
+        if ma25.iloc[-1] >= ma25.iloc[-5]: score += 1
+        if price > ma5.iloc[-1]: score += 1
+
+        return score
+    except:
+        return 0
+
+# ----------------------
+# 出来高
+# ----------------------
+def volume_check(code):
+    try:
+        df = yf.Ticker(f"{code}.T").history(period="1mo")
+        v = df["Volume"]
+
+        if v.iloc[-1] > v.mean()*2:
+            return 2
+        elif v.iloc[-1] > v.mean():
+            return 1
+    except:
+        pass
+    return 0
+
+# ----------------------
+# PER / PEG
+# ----------------------
+def valuation(code):
+    try:
+        info = yf.Ticker(f"{code}.T").info
+        per = info.get("trailingPE")
+        growth = info.get("earningsGrowth")
+
+        score = 0
+
+        if per:
+            if per < 20: score += 2
+            elif per < 40: score += 1
+
+        if growth and growth > 0:
+            peg = per / (growth*100)
+            if peg < 1: score += 1
+
+        return score
+    except:
+        return 0
+
+# ----------------------
+# TDnet簡易（代替）
+# ----------------------
+def pdf_score(code):
+    try:
+        url = f"https://irbank.net/{code}"
+        txt = requests.get(url, timeout=5).text
+
+        score = 0
+        if "進捗率" in txt: score += 2
+        if "上方修正" in txt: score += 2
+
+        return score
+    except:
+        return 0
+
+# ----------------------
+# 総合評価
+# ----------------------
+def evaluate(code):
+    score = (
+        trend_reversal(code) +
+        volume_check(code) +
+        valuation(code) +
+        pdf_score(code)
+    )
+
+    if score >= 8:
+        rank = "◎"
+    elif score >= 5:
+        rank = "○"
+    elif score >= 3:
+        rank = "△"
+    else:
+        rank = "×"
+
+    return rank, score
+
+# ----------------------
+# ログ保存
+# ----------------------
+def save_log(results):
+    file_exists = os.path.isfile(LOG_FILE)
+
+    with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+
+        if not file_exists:
+            writer.writerow(["date", "code", "rank", "score"])
+
+        today = datetime.today().strftime("%Y-%m-%d")
+
+        for r in results:
+            writer.writerow([today, r[0], r[1], r[2]])
+
+# ----------------------
+# 週間ランキング
+# ----------------------
+def weekly_ranking():
+    if not os.path.exists(LOG_FILE):
+        return "データなし\n"
+
+    data = {}
+
+    with open(LOG_FILE, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            code = row["code"]
+            score = int(row["score"])
+
+            if code not in data:
+                data[code] = []
+            data[code].append(score)
+
+    avg_scores = [(c, sum(v)/len(v)) for c,v in data.items()]
+    avg_scores.sort(key=lambda x: x[1], reverse=True)
+
+    msg = "【週間ランキング】\n"
+    for i, (c, s) in enumerate(avg_scores[:10]):
+        msg += f"{i+1}. {c} ({round(s,1)})\n"
+
+    return msg + "\n"
+
+# ----------------------
+# 勝率分布
+# ----------------------
+def win_rate():
+    if not os.path.exists(LOG_FILE):
+        return "勝率データなし\n"
+
+    count = {"◎":0,"○":0,"△":0,"×":0}
+
+    with open(LOG_FILE, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            count[row["rank"]] += 1
+
+    total = sum(count.values())
+
+    msg = "【勝率分布】\n"
+    for k,v in count.items():
+        if total > 0:
+            msg += f"{k}: {round(v/total*100,1)}%\n"
+
+    return msg + "\n"
+
+# ----------------------
+# 来週監視銘柄
+# ----------------------
+def next_watchlist():
+    if not os.path.exists(LOG_FILE):
+        return "監視銘柄なし\n"
+
+    scores = {}
+
+    with open(LOG_FILE, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            code = row["code"]
+            score = int(row["score"])
+
+            if code not in scores:
+                scores[code] = 0
+            scores[code] += score
+
+    sorted_list = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    msg = "【来週監視銘柄】\n"
+    for c,s in sorted_list[:10]:
+        msg += f"{c}\n"
+
+    return msg
+
+# ----------------------
+# メイン
+# ----------------------
+def run_screening():
+    today = datetime.today().weekday()
+    codes = get_codes()
+
+    # 土日 → 週まとめ
+    if today >= 5:
+        msg = "📊週次レポート\n\n"
+        msg += weekly_ranking()
+        msg += win_rate()
+        msg += next_watchlist()
+
+        send_line(msg)
+        return
+
+    # 平日
+    if not codes:
+        send_line("本日決算なし")
+        return
+
+    results = []
+    for c in codes:
+        rank, score = evaluate(c)
+        results.append((c, rank, score))
+
+    results.sort(key=lambda x: x[2], reverse=True)
+
+    save_log(results)
+
+    msg = "【決算初動スクリーニング】★直後\n"
+    for r in results[:10]:
+        msg += f"{r[0]} {r[1]}({r[2]})\n"
+
+    send_line(msg)
+
+# 実行
 if __name__ == "__main__":
-    send_line("テスト通知：GitHub Actions成功")
+    run_screening()
