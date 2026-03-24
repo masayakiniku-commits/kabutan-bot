@@ -1,0 +1,29 @@
+name: Test Stock Notification
+
+# 実行タイミング
+on:
+  workflow_dispatch:   # 手動で即実行
+  schedule:
+    - cron: '45 6 * * 1-5'   # テスト用 15:45 JST = UTC 6:45
+
+jobs:
+  run_screening:
+    runs-on: ubuntu-latest
+
+    steps:
+      # リポジトリのコード取得
+      - uses: actions/checkout@v3
+
+      # Python セットアップ
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # 依存ライブラリインストール
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # テスト用スクリプト実行
+      - name: Run kabutan_final.py (Test)
+        run: python kabutan_final.py
