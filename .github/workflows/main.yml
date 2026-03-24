@@ -1,41 +1,10 @@
-def run_screening():
-    today = datetime.today().weekday()
-    codes = get_codes()
+name: Run Script
 
-    # ======================
-    # ■ 金曜：①週まとめ
-    # ======================
-    if today == 4:
-        msg = "📊週次レポート（仕込み用）\n\n"
-        msg += weekly_ranking()
-        msg += win_rate()
-        msg += next_watchlist()
+on:
+  workflow_dispatch:
 
-        send_line(msg)
-
-    # ======================
-    # ■ 平日：②スクリーニング（月〜金）
-    # ======================
-    if today < 5:
-        if not codes:
-            send_line("本日決算なし")
-        else:
-            results = []
-            for c in codes:
-                rank, score = evaluate(c)
-                results.append((c, rank, score))
-
-            results.sort(key=lambda x: x[2], reverse=True)
-
-            save_log(results)
-
-            msg = "【決算初動スクリーニング】★直後\n"
-            for r in results[:10]:
-                msg += f"{r[0]} {r[1]}({r[2]})\n"
-
-            send_line(msg)
-
-    # ======================
-    # ■ 土日：何もしない
-    # ======================
-    return
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "OK"
