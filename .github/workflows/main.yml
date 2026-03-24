@@ -1,30 +1,47 @@
-# .github/workflows/main.yml
 name: Daily Stock Notification
 
-# 実行タイミング
 on:
   schedule:
-    - cron: '0 7 * * 1-5'    # 月〜金 16:00 JST（UTC 7:00）
-  workflow_dispatch:         # 手動実行も可能
+    - cron: '0 7 * * 1-5'  # 月〜金 16:00 JST（UTC 7:00）
+  workflow_dispatch:       # 手動実行も可能
 
 jobs:
   run_screening:
     runs-on: ubuntu-latest
 
     steps:
-      # リポジトリのコードを取得
       - uses: actions/checkout@v3
 
-      # Python セットアップ
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      # 依存ライブラリインストール
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ----------------------
+      # 前回のログをダウンロード
+      # ----------------------
+      - name: Download previous log
+        uses: actions/download-artifact@v3
+        with:
+          name: trade-log
+          path: ./   # ルートにダウンロード
+
+      # ----------------------
       # スクリプト実行
+      # ----------------------
       - name: Run kabutan_final.py
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
         run: python kabutan_final.py
+
+      # ----------------------
+      # 実行後のログをアップロード
+      # ----------------------
+      - name: Upload trade log
+        uses: actions/upload-artifact@v3
+        with:
+          name: trade-log
+          path: trade_log.csv
