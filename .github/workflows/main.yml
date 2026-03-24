@@ -3,37 +3,46 @@ name: Daily Stock Notification
 on:
   schedule:
     - cron: '0 7 * * 1-5'  # 月〜金 16:00 JST（UTC 7:00）
-  workflow_dispatch:
+  workflow_dispatch:       # 手動実行も可能
 
 jobs:
   run_screening:
     runs-on: ubuntu-latest
 
     steps:
+      # リポジトリをチェックアウト
       - uses: actions/checkout@v3
 
+      # Python セットアップ
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
+      # 依存ライブラリインストール
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # ----------------------
       # 前回ログをダウンロード（v4）
+      # ----------------------
       - name: Download previous log
         uses: actions/download-artifact@v4
         with:
           name: trade-log
-          path: ./   # ルートに展開
+          path: ./  # ルートに展開
 
+      # ----------------------
       # スクリプト実行
+      # ----------------------
       - name: Run kabutan_final.py
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
         run: python kabutan_final.py
 
+      # ----------------------
       # 実行後ログをアップロード（v4）
+      # ----------------------
       - name: Upload trade log
         uses: actions/upload-artifact@v4
         with:
