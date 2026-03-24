@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # リポジトリをチェックアウト
+      # リポジトリ取得
       - uses: actions/checkout@v3
 
       # Python セットアップ
@@ -24,13 +24,14 @@ jobs:
         run: pip install -r requirements.txt
 
       # ----------------------
-      # 前回ログをダウンロード（v4）
+      # 前回ログをダウンロード（存在しない場合はスキップ）
       # ----------------------
-      - name: Download previous log
+      - name: Download previous log (if exists)
         uses: actions/download-artifact@v4
         with:
           name: trade-log
-          path: ./  # ルートに展開
+          path: ./
+        continue-on-error: true  # artifactがなくてもエラーにならずスキップ
 
       # ----------------------
       # スクリプト実行
@@ -41,7 +42,7 @@ jobs:
         run: python kabutan_final.py
 
       # ----------------------
-      # 実行後ログをアップロード（v4）
+      # 実行後ログをアップロード
       # ----------------------
       - name: Upload trade log
         uses: actions/upload-artifact@v4
