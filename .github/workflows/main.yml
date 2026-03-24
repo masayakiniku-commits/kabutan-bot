@@ -4,10 +4,7 @@ from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
 import yfinance as yf
-from flask import Flask, request, jsonify
 
-app = Flask(__name__)
-LINE_TOKEN = os.getenv("LINE_TOKEN")
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
@@ -19,21 +16,9 @@ if not os.path.exists(LOG_FILE):
         writer.writerow(["date", "code", "rank", "score"])
 
 # ----------------------
-# LINE送信
+# 4桁株コード抽出
 # ----------------------
-def send_line(msg):
-    url = "https://api.line.me/v2/bot/message/broadcast"
-    headers = {"Authorization": f"Bearer {LINE_TOKEN}", "Content-Type": "application/json"}
-    try:
-        res = requests.post(url, headers=headers, json={"messages":[{"type":"text","text":msg}]}, timeout=10)
-        res.raise_for_status()
-    except Exception as e:
-        print(f"LINE送信エラー: {e}")
-
-# ----------------------
-# LINE受信メッセージ解析（4桁だけ抽出）
-# ----------------------
-def parse_line_message(msg_text):
+def parse_codes(msg_text):
     codes = [token for token in msg_text.split() if token.isdigit() and len(token)==4]
     return codes if codes else None
 
@@ -198,13 +183,13 @@ def next_watchlist():
     return msg
 
 # ----------------------
-# メインスクリーニング
+# メインスクリーニング（LINE送信省略版）
 # ----------------------
 def run_screening(codes=None):
     if codes is None:
         codes = get_codes()
     if not codes:
-        send_line("本日決算なし")
+        print("本日決算なし")
         return
     results = []
     for c in codes:
@@ -212,26 +197,17 @@ def run_screening(codes=None):
         results.append((c, rank, score))
     results.sort(key=lambda x: x[2], reverse=True)
     save_log(results)
-    msg = "【決算初動スクリーニング】★直後\n"
-    for r in results[:10]: msg += f"{r[0]} {r[1]}({r[2]})\n"
-    send_line(msg)
+
+    # 結果表示
+    print("【決算初動スクリーニング】★直後")
+    for r in results[:10]:
+        print(f"{r[0]} {r[1]}({r[2]})")
 
 # ----------------------
-# Flask Webhook
-# ----------------------
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    try:
-        msg_text = data["events"][0]["message"]["text"]
-        codes = parse_line_message(msg_text)
-        run_screening(codes=codes)
-    except Exception as e:
-        print(f"Webhook処理エラー: {e}")
-    return jsonify({"status":"ok"})
-
-# ----------------------
-# ローカルまたはサーバー起動
+# ローカル実行
 # ----------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    run_screening()
+    print(weekly_ranking())
+    print(win_rate())
+    print(next_watchlist())
