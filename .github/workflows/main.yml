@@ -3,7 +3,7 @@ name: Daily Stock Notification
 on:
   schedule:
     - cron: '0 7 * * 1-5'  # 月〜金 16:00 JST（UTC 7:00）
-  workflow_dispatch:
+  workflow_dispatch:       # 手動実行も可能
 
 jobs:
   run_screening:
@@ -20,19 +20,27 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # artifactが存在しなくてもエラーにならずスキップ
+      # ----------------------
+      # 前回ログをダウンロード（存在しない場合はスキップ）
+      # ----------------------
       - name: Download previous log
         uses: actions/download-artifact@v4
         with:
           name: trade-log
           path: ./
-        continue-on-error: true   # ←ここ重要
+        continue-on-error: true  # artifactがなくてもスキップ
 
+      # ----------------------
+      # スクリプト実行
+      # ----------------------
       - name: Run kabutan_final.py
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
         run: python kabutan_final.py
 
+      # ----------------------
+      # 実行後ログをアップロード
+      # ----------------------
       - name: Upload trade log
         uses: actions/upload-artifact@v4
         with:
