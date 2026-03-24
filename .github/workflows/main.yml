@@ -16,14 +16,7 @@ if not os.path.exists(LOG_FILE):
         writer.writerow(["date", "code", "rank", "score"])
 
 # ----------------------
-# 4桁株コード抽出
-# ----------------------
-def parse_codes(msg_text):
-    codes = [token for token in msg_text.split() if token.isdigit() and len(token)==4]
-    return codes if codes else None
-
-# ----------------------
-# 決算銘柄取得（通常モード）
+# 決算銘柄取得
 # ----------------------
 def get_codes():
     url = "https://kabutan.jp/warning/?mode=1_2"
@@ -131,59 +124,7 @@ def save_log(results):
             writer.writerow([today, r[0], r[1], r[2]])
 
 # ----------------------
-# 週間ランキング
-# ----------------------
-def weekly_ranking():
-    if not os.path.exists(LOG_FILE): return "データなし\n"
-    data = {}
-    with open(LOG_FILE, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            code = row["code"]
-            score = int(row["score"])
-            data.setdefault(code, []).append(score)
-    avg_scores = [(c, sum(v)/len(v)) for c,v in data.items()]
-    avg_scores.sort(key=lambda x: x[1], reverse=True)
-    msg = "【週間ランキング】\n"
-    for i,(c,s) in enumerate(avg_scores[:10]):
-        msg += f"{i+1}. {c} ({round(s,1)})\n"
-    return msg + "\n"
-
-# ----------------------
-# 勝率分布
-# ----------------------
-def win_rate():
-    if not os.path.exists(LOG_FILE): return "勝率データなし\n"
-    count = {"◎":0,"○":0,"△":0,"×":0}
-    with open(LOG_FILE, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            count[row["rank"]] += 1
-    total = sum(count.values())
-    msg = "【勝率分布】\n"
-    for k,v in count.items():
-        if total > 0: msg += f"{k}: {round(v/total*100,1)}%\n"
-    return msg + "\n"
-
-# ----------------------
-# 来週監視銘柄
-# ----------------------
-def next_watchlist():
-    if not os.path.exists(LOG_FILE): return "監視銘柄なし\n"
-    scores = {}
-    with open(LOG_FILE, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            code = row["code"]
-            score = int(row["score"])
-            scores[code] = scores.get(code,0)+score
-    sorted_list = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    msg = "【来週監視銘柄】\n"
-    for c,s in sorted_list[:10]: msg += f"{c}\n"
-    return msg
-
-# ----------------------
-# メインスクリーニング（LINE送信省略版）
+# メインスクリーニング
 # ----------------------
 def run_screening(codes=None):
     if codes is None:
@@ -208,6 +149,3 @@ def run_screening(codes=None):
 # ----------------------
 if __name__ == "__main__":
     run_screening()
-    print(weekly_ranking())
-    print(win_rate())
-    print(next_watchlist())
