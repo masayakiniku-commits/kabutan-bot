@@ -4,7 +4,7 @@ name: Daily Stock Notification
 # 実行タイミング
 on:
   schedule:
-    - cron: '50 6 * * 1-5'    # 月〜金 16:00 JST（UTC 7:00）
+    - cron: '45 6 * * 1-5'    # 月〜金 16:00 JST（UTC 7:00）
   workflow_dispatch:         # 手動実行も可能
 
 jobs:
