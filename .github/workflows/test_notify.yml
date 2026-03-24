@@ -1,9 +1,0 @@
-# 1. ローカルリポジトリでファイルを削除
-rm .github/workflows/test_notify.yml
-
-# 2. Git に変更を反映
-git add -u
-git commit -m "Delete test_notify.yml"
-
-# 3. GitHub に push
-git push origin main
