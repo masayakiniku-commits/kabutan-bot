@@ -1,4 +1,4 @@
-# kabutan_final_full_run.py
+# kabutan_final_full_run_notify.py
 
 import os
 import sys
@@ -6,55 +6,55 @@ import csv
 from datetime import datetime
 import pytz
 import requests
-import yfinance as yf
 from bs4 import BeautifulSoup
+import yfinance as yf
 
-LINE_TOKEN = os.getenv("LINE_TOKEN")
+LINE_TOKEN = os.getenv("LINE_TOKEN")  # GitHub Secrets で設定
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
-# LINE送信
+# LINE Notify送信
 # ----------------------
 def send_line(msg):
     if not LINE_TOKEN:
         print("LINE_TOKENが設定されていません")
         return
-    url = "https://api.line.me/v2/bot/message/broadcast"
-    headers = {
-        "Authorization": f"Bearer {LINE_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    url = "https://notify-api.line.me/api/notify"
+    headers = {"Authorization": f"Bearer {LINE_TOKEN}"}
     try:
-        res = requests.post(url, headers=headers, json={"messages":[{"type":"text","text":msg}]}, timeout=10)
+        res = requests.post(url, headers=headers, data={"message": msg}, timeout=10)
         res.raise_for_status()
+        print(f"LINE送信成功: {msg[:30]}...")
     except Exception as e:
         print(f"LINE送信エラー: {e}")
 
 # ----------------------
-# 決算銘柄取得（当日用）
+# 今日の決算銘柄取得
 # ----------------------
 def get_today_codes():
     try:
         url = "https://kabutan.jp/warning/?mode=1_2"
-        res = requests.get(url, headers={"User-Agent":"Mozilla"}, timeout=10)
+        res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         soup = BeautifulSoup(res.text, "html.parser")
         codes = []
         for a in soup.find_all("a"):
-            href = a.get("href","")
+            href = a.get("href", "")
             if "/stock/" in href:
                 c = href.split("/stock/")[1].split("/")[0]
-                if c.isdigit() and len(c)==4:
+                if c.isdigit() and len(c) == 4:
                     codes.append(c)
-        return list(set(codes))
+        codes = list(set(codes))
+        print(f"本日の決算銘柄取得: {codes}")
+        return codes
     except Exception as e:
         print(f"銘柄取得エラー: {e}")
         return []
 
 # ----------------------
-# 決算評価（簡易）
+# 決算評価（簡易ダミー）
 # ----------------------
 def evaluate(code):
-    # 本格的なスコア計算は省略、ダミーで○/5
+    # TODO: 必要に応じて本格的な評価ロジックに置き換え
     return "○", 5
 
 # ----------------------
@@ -68,9 +68,10 @@ def save_log(results, date_str):
             writer.writerow(["date", "code", "rank", "score"])
         for r in results:
             writer.writerow([date_str, r[0], r[1], r[2]])
+    print(f"{date_str} の結果をログ保存しました")
 
 # ----------------------
-# 過去日通知
+# 過去日の通知
 # ----------------------
 def notify_past(date_str):
     if not os.path.exists(LOG_FILE):
@@ -94,7 +95,7 @@ def notify_past(date_str):
 # メイン処理
 # ----------------------
 def run_screening(target_date=None):
-    jst = pytz.timezone('Asia/Tokyo')
+    jst = pytz.timezone("Asia/Tokyo")
     today_str = datetime.now(jst).strftime("%Y-%m-%d")
     date_str = target_date if target_date else today_str
 
@@ -115,6 +116,7 @@ def run_screening(target_date=None):
         results.append((c, rank, score))
     save_log(results, date_str)
 
+    # 通知メッセージ作成
     msg = f"【{date_str} 決算初動スクリーニング】★直後\n"
     for r in results[:10]:
         msg += f"{r[0]} {r[1]}({r[2]})\n"
