@@ -19,6 +19,6 @@ jobs:
           pip install -r requirements.txt
       - name: Run screening
         run: |
-          python kabutan_final_full_run.py
+          python kabutan_final_full_run.py 2026-02-13
         env:
           LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
