@@ -1,9 +1,7 @@
-name: Daily Kabutan Screening
+name: Kabutan Screening
 
 on:
-  schedule:
-    - cron: '0 15 * * 1-5'  # 日本時間15時に平日実行
-  workflow_dispatch:        # 手動実行も可能
+  workflow_dispatch:
 
 jobs:
   run-screening:
@@ -13,12 +11,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-      - name: Run screening
-        run: |
-          python kabutan_final_full_run.py 2026-02-13
-        env:
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+        run: pip install -r requirements.txt
+      - name: Run Screening
+        run: python kabutan_final_full_run.py 2026-02-13
