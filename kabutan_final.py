@@ -228,7 +228,7 @@ def run_screening():
         return
 
     if not codes:
-        send_line("本日決算なし")
+        send_line("本日有効な決算なし")
         return
 
     results = []
