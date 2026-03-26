@@ -1,4 +1,4 @@
-# kabutan_final_full.py
+# kabutan_final_full_run.py
 import os
 import csv
 from datetime import datetime
@@ -13,7 +13,7 @@ LINE_TOKEN = os.getenv("LINE_TOKEN")
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
-# LINE送信
+# LINE通知
 # ----------------------
 def send_line(msg):
     if not LINE_TOKEN:
@@ -27,11 +27,12 @@ def send_line(msg):
     try:
         res = requests.post(url, headers=headers, json={"messages":[{"type":"text","text":msg}]}, timeout=10)
         res.raise_for_status()
+        print("LINE送信完了")
     except Exception as e:
         print(f"LINE送信エラー: {e}")
 
 # ----------------------
-# 決算銘柄取得（Kabutan）
+# Kabutan決算銘柄取得
 # ----------------------
 def get_codes():
     try:
@@ -74,7 +75,7 @@ def trend_reversal(code):
         return 0
 
 # ----------------------
-# 出来高
+# 出来高チェック
 # ----------------------
 def volume_check(code):
     try:
@@ -139,7 +140,7 @@ def evaluate(code):
     return rank, score
 
 # ----------------------
-# ログ保存
+# CSVログ保存
 # ----------------------
 def save_log(results, target_date):
     file_exists = os.path.isfile(LOG_FILE)
@@ -157,7 +158,6 @@ def run_screening(target_date=None):
     jst = pytz.timezone('Asia/Tokyo')
     today = datetime.now(jst)
     if target_date:
-        # YYYY-MM-DD → datetime
         try:
             target_dt = datetime.strptime(target_date, "%Y-%m-%d")
         except:
@@ -166,20 +166,12 @@ def run_screening(target_date=None):
     else:
         target_dt = today
 
-    # 土日 → 週次は除外
-    if target_dt.weekday() >= 5:
-        msg = f"📊{target_dt.strftime('%Y/%m/%d')} 週次レポート\n\n"
-        msg += "週次ランキング・勝率・監視銘柄は過去日取得未対応\n"
-        send_line(msg)
-        return
-
     # Kabutanから決算銘柄取得
     codes = get_codes()
     if not codes:
         send_line(f"{target_dt.strftime('%Y/%m/%d')} 本日有効な決算なし")
         return
 
-    # 評価
     results = []
     for c in codes:
         rank, score = evaluate(c)
@@ -189,7 +181,7 @@ def run_screening(target_date=None):
     # CSVログ保存
     save_log(results, target_dt.strftime('%Y-%m-%d'))
 
-    # LINE送信
+    # LINE通知
     msg = f"【決算初動スクリーニング】★直後 {target_dt.strftime('%Y/%m/%d')}\n"
     for r in results[:10]:
         msg += f"{r[0]} {r[1]}({r[2]})\n"
@@ -201,5 +193,5 @@ def run_screening(target_date=None):
 if __name__ == "__main__":
     target_date = None
     if len(sys.argv) > 1:
-        target_date = sys.argv[1]  # YYYY-MM-DD
+        target_date = sys.argv[1]  # YYYY-MM-DD 形式
     run_screening(target_date)
