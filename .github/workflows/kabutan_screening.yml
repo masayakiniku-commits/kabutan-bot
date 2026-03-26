@@ -3,7 +3,7 @@ name: Kabutan 決算通知
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 0 * * *'  # UTC 0時実行（JST 9時に合わせたい場合は調整可）
+    - cron: '0 0 * * *'  # 毎日 UTC 0:00 (JST 9:00 に合わせる場合 UTC 0:00 で OK)
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
