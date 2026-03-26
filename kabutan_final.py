@@ -13,28 +13,24 @@ LINE_TOKEN = os.getenv("LINE_TOKEN")
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
-# LINE通知
+# LINE送信
 # ----------------------
 def send_line(msg):
     if not LINE_TOKEN:
         print("LINE_TOKENが設定されていません")
         return
     url = "https://api.line.me/v2/bot/message/broadcast"
-    headers = {
-        "Authorization": f"Bearer {LINE_TOKEN}",
-        "Content-Type": "application/json"
-    }
+    headers = {"Authorization": f"Bearer {LINE_TOKEN}", "Content-Type": "application/json"}
     try:
         res = requests.post(url, headers=headers, json={"messages":[{"type":"text","text":msg}]}, timeout=10)
         res.raise_for_status()
-        print("LINE送信完了")
     except Exception as e:
         print(f"LINE送信エラー: {e}")
 
 # ----------------------
-# Kabutan決算銘柄取得
+# 決算銘柄取得
 # ----------------------
-def get_codes():
+def get_codes(date=None):
     try:
         url = "https://kabutan.jp/warning/?mode=1_2"
         res = requests.get(url, headers={"User-Agent":"Mozilla"}, timeout=10)
@@ -70,8 +66,7 @@ def trend_reversal(code):
         if ma25.iloc[-1] >= ma25.iloc[-5]: score += 1
         if price > ma5.iloc[-1]: score += 1
         return score
-    except Exception as e:
-        print(f"{code} trend_reversalエラー: {e}")
+    except:
         return 0
 
 # ----------------------
@@ -81,16 +76,14 @@ def volume_check(code):
     try:
         df = yf.Ticker(f"{code}.T").history(period="1mo")
         v = df["Volume"]
-        if v.iloc[-1] > v.mean()*2:
-            return 2
-        elif v.iloc[-1] > v.mean():
-            return 1
-    except Exception as e:
-        print(f"{code} volume_checkエラー: {e}")
+        if v.iloc[-1] > v.mean()*2: return 2
+        elif v.iloc[-1] > v.mean(): return 1
+    except:
+        pass
     return 0
 
 # ----------------------
-# PER / PEG
+# PER/PEG評価
 # ----------------------
 def valuation(code):
     try:
@@ -105,8 +98,7 @@ def valuation(code):
             peg = per / (growth*100)
             if peg < 1: score += 1
         return score
-    except Exception as e:
-        print(f"{code} valuationエラー: {e}")
+    except:
         return 0
 
 # ----------------------
@@ -120,8 +112,7 @@ def pdf_score(code):
         if "進捗率" in txt: score += 2
         if "上方修正" in txt: score += 2
         return score
-    except Exception as e:
-        print(f"{code} pdf_scoreエラー: {e}")
+    except:
         return 0
 
 # ----------------------
@@ -129,69 +120,48 @@ def pdf_score(code):
 # ----------------------
 def evaluate(code):
     score = trend_reversal(code) + volume_check(code) + valuation(code) + pdf_score(code)
-    if score >= 8:
-        rank = "◎"
-    elif score >= 5:
-        rank = "○"
-    elif score >= 3:
-        rank = "△"
-    else:
-        rank = "×"
+    if score >= 8: rank = "◎"
+    elif score >= 5: rank = "○"
+    elif score >= 3: rank = "△"
+    else: rank = "×"
     return rank, score
 
 # ----------------------
-# CSVログ保存
+# ログ保存
 # ----------------------
-def save_log(results, target_date):
+def save_log(results):
     file_exists = os.path.isfile(LOG_FILE)
+    jst = pytz.timezone('Asia/Tokyo')
+    today = datetime.now(jst).strftime("%Y-%m-%d")
     with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["date", "code", "rank", "score"])
+            writer.writerow(["date","code","rank","score"])
         for r in results:
-            writer.writerow([target_date, r[0], r[1], r[2]])
+            writer.writerow([today,r[0],r[1],r[2]])
 
 # ----------------------
 # メイン処理
 # ----------------------
 def run_screening(target_date=None):
     jst = pytz.timezone('Asia/Tokyo')
-    today = datetime.now(jst)
-    if target_date:
-        try:
-            target_dt = datetime.strptime(target_date, "%Y-%m-%d")
-        except:
-            print("日付形式エラー: YYYY-MM-DD で指定してください")
-            return
-    else:
-        target_dt = today
-
-    # Kabutanから決算銘柄取得
-    codes = get_codes()
+    codes = get_codes(target_date)
     if not codes:
-        send_line(f"{target_dt.strftime('%Y/%m/%d')} 本日有効な決算なし")
+        send_line("本日有効な決算なし")
         return
-
     results = []
     for c in codes:
         rank, score = evaluate(c)
         results.append((c, rank, score))
     results.sort(key=lambda x: x[2], reverse=True)
-
-    # CSVログ保存
-    save_log(results, target_dt.strftime('%Y-%m-%d'))
-
-    # LINE通知
-    msg = f"【決算初動スクリーニング】★直後 {target_dt.strftime('%Y/%m/%d')}\n"
+    save_log(results)
+    msg = "【決算初動スクリーニング】★直後\n"
     for r in results[:10]:
         msg += f"{r[0]} {r[1]}({r[2]})\n"
     send_line(msg)
 
-# ----------------------
-# 実行
-# ----------------------
 if __name__ == "__main__":
     target_date = None
     if len(sys.argv) > 1:
-        target_date = sys.argv[1]  # YYYY-MM-DD 形式
+        target_date = sys.argv[1]
     run_screening(target_date)
