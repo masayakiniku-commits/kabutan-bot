@@ -1,0 +1,32 @@
+name: Kabutan 決算通知
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 0 * * *'  # UTC 0時 → JST 9時に合わせる場合は +9h 調整
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Node.js 24 強制
+  LINE_TOKEN: ${{ secrets.LINE_TOKEN }}      # Notify トークンを GitHub Secrets に登録
+
+jobs:
+  screening:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリチェックアウト
+        uses: actions/checkout@v3
+
+      - name: Pythonセットアップ
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 必要ライブラリをインストール
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests beautifulsoup4 yfinance pytz
+
+      - name: スクリーニングスクリプト実行
+        run: |
+          python kabutan_final_full_run_notify.py
