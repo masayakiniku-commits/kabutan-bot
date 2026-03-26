@@ -1,4 +1,3 @@
-# kabutan_final_full_run.py
 import os
 import csv
 from datetime import datetime
@@ -11,6 +10,16 @@ import sys
 
 LINE_TOKEN = os.getenv("LINE_TOKEN")
 LOG_FILE = "trade_log.csv"
+
+# ----------------------
+# 日付取得
+# ----------------------
+def get_target_date():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
+    else:
+        jst = pytz.timezone("Asia/Tokyo")
+        return datetime.now(jst).strftime("%Y-%m-%d")
 
 # ----------------------
 # LINE送信
@@ -30,9 +39,9 @@ def send_line(msg):
 # ----------------------
 # 決算銘柄取得
 # ----------------------
-def get_codes(date=None):
+def get_codes(date):
     try:
-        url = "https://kabutan.jp/warning/?mode=1_2"
+        url = f"https://kabutan.jp/warning/?mode=1_2&date={date.replace('-','')}"
         res = requests.get(url, headers={"User-Agent":"Mozilla"}, timeout=10)
         soup = BeautifulSoup(res.text, "html.parser")
         codes = []
@@ -70,7 +79,7 @@ def trend_reversal(code):
         return 0
 
 # ----------------------
-# 出来高チェック
+# 出来高
 # ----------------------
 def volume_check(code):
     try:
@@ -79,11 +88,10 @@ def volume_check(code):
         if v.iloc[-1] > v.mean()*2: return 2
         elif v.iloc[-1] > v.mean(): return 1
     except:
-        pass
-    return 0
+        return 0
 
 # ----------------------
-# PER/PEG評価
+# PER / PEG
 # ----------------------
 def valuation(code):
     try:
@@ -129,39 +137,39 @@ def evaluate(code):
 # ----------------------
 # ログ保存
 # ----------------------
-def save_log(results):
+def save_log(results, date):
     file_exists = os.path.isfile(LOG_FILE)
-    jst = pytz.timezone('Asia/Tokyo')
-    today = datetime.now(jst).strftime("%Y-%m-%d")
     with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["date","code","rank","score"])
+            writer.writerow(["date", "code", "rank", "score"])
         for r in results:
-            writer.writerow([today,r[0],r[1],r[2]])
+            writer.writerow([date, r[0], r[1], r[2]])
 
 # ----------------------
 # メイン処理
 # ----------------------
-def run_screening(target_date=None):
-    jst = pytz.timezone('Asia/Tokyo')
+def run_screening():
+    target_date = get_target_date()
     codes = get_codes(target_date)
     if not codes:
-        send_line("本日有効な決算なし")
+        send_line(f"本日有効な決算なし ({target_date})")
         return
+
     results = []
     for c in codes:
         rank, score = evaluate(c)
         results.append((c, rank, score))
     results.sort(key=lambda x: x[2], reverse=True)
-    save_log(results)
-    msg = "【決算初動スクリーニング】★直後\n"
+    save_log(results, target_date)
+
+    msg = f"【決算初動スクリーニング】★直後 ({target_date})\n"
     for r in results[:10]:
         msg += f"{r[0]} {r[1]}({r[2]})\n"
     send_line(msg)
 
+# ----------------------
+# 実行
+# ----------------------
 if __name__ == "__main__":
-    target_date = None
-    if len(sys.argv) > 1:
-        target_date = sys.argv[1]
-    run_screening(target_date)
+    run_screening()
