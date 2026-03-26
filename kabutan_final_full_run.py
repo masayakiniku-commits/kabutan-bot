@@ -1,4 +1,3 @@
-# kabutan_final_full_run_notify.py
 import os
 import sys
 import csv
@@ -8,11 +7,11 @@ import requests
 from bs4 import BeautifulSoup
 import yfinance as yf
 
-LINE_TOKEN = os.getenv("LINE_TOKEN")  # GitHub Secrets で設定
+LINE_TOKEN = os.getenv("LINE_TOKEN")  # GitHub Secrets に登録
 LOG_FILE = "trade_log.csv"
 
 # ----------------------
-# LINE Notify送信
+# LINE送信
 # ----------------------
 def send_line(msg):
     if not LINE_TOKEN:
@@ -50,7 +49,7 @@ def get_today_codes():
         return []
 
 # ----------------------
-# 決算評価（簡易ダミー）
+# 決算評価（簡易）
 # ----------------------
 def evaluate(code):
     return "○", 5
@@ -98,11 +97,9 @@ def run_screening(target_date=None):
     date_str = target_date if target_date else today_str
 
     if target_date:
-        # 過去日通知
         notify_past(date_str)
         return
 
-    # 今日の決算取得
     codes = get_today_codes()
     if not codes:
         send_line("本日有効な決算なし")
@@ -114,15 +111,11 @@ def run_screening(target_date=None):
         results.append((c, rank, score))
     save_log(results, date_str)
 
-    # 通知メッセージ作成
     msg = f"【{date_str} 決算初動スクリーニング】★直後\n"
     for r in results[:10]:
         msg += f"{r[0]} {r[1]}({r[2]})\n"
     send_line(msg)
 
-# ----------------------
-# 実行
-# ----------------------
 if __name__ == "__main__":
     target_date = sys.argv[1] if len(sys.argv) > 1 else None
     run_screening(target_date)
