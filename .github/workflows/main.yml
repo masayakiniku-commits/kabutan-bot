@@ -157,7 +157,7 @@ def next_watchlist():
 def run_screening():
     codes = get_codes()
     if not codes:
-        print("本日決算なし")
+        print("本日有効な決算なし")
         return
     results = []
     for c in codes:
