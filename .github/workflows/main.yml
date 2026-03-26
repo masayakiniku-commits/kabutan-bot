@@ -1,197 +1,24 @@
-# kabutan_final_full_run.py
-import os
-import csv
-from datetime import datetime
-import requests
-from bs4 import BeautifulSoup
-import yfinance as yf
-import pandas as pd
-import pytz
-import sys
+name: Daily Kabutan Screening
 
-LINE_TOKEN = os.getenv("LINE_TOKEN")
-LOG_FILE = "trade_log.csv"
+on:
+  schedule:
+    - cron: '0 15 * * 1-5'  # 日本時間15時に平日実行
+  workflow_dispatch:        # 手動実行も可能
 
-# ----------------------
-# LINE通知
-# ----------------------
-def send_line(msg):
-    if not LINE_TOKEN:
-        print("LINE_TOKENが設定されていません")
-        return
-    url = "https://api.line.me/v2/bot/message/broadcast"
-    headers = {
-        "Authorization": f"Bearer {LINE_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    try:
-        res = requests.post(url, headers=headers, json={"messages":[{"type":"text","text":msg}]}, timeout=10)
-        res.raise_for_status()
-        print("LINE送信完了")
-    except Exception as e:
-        print(f"LINE送信エラー: {e}")
-
-# ----------------------
-# Kabutan決算銘柄取得
-# ----------------------
-def get_codes():
-    try:
-        url = "https://kabutan.jp/warning/?mode=1_2"
-        res = requests.get(url, headers={"User-Agent":"Mozilla"}, timeout=10)
-        soup = BeautifulSoup(res.text, "html.parser")
-        codes = []
-        for a in soup.find_all("a"):
-            href = a.get("href","")
-            if "/stock/" in href:
-                c = href.split("/stock/")[1].split("/")[0]
-                if c.isdigit() and len(c)==4:
-                    codes.append(c)
-        return list(set(codes))
-    except Exception as e:
-        print(f"銘柄取得エラー: {e}")
-        return []
-
-# ----------------------
-# テクニカル評価
-# ----------------------
-def trend_reversal(code):
-    try:
-        df = yf.Ticker(f"{code}.T").history(period="1y")
-        if len(df) < 200: return 0
-        close = df["Close"]
-        ma200 = close.rolling(200).mean()
-        ma25 = close.rolling(25).mean()
-        ma5 = close.rolling(5).mean()
-        price = close.iloc[-1]
-        kairi = (price - ma200.iloc[-1]) / ma200.iloc[-1] * 100
-        score = 0
-        if price < ma200.iloc[-1]: score += 1
-        if -20 < kairi < -5: score += 1
-        if ma25.iloc[-1] >= ma25.iloc[-5]: score += 1
-        if price > ma5.iloc[-1]: score += 1
-        return score
-    except Exception as e:
-        print(f"{code} trend_reversalエラー: {e}")
-        return 0
-
-# ----------------------
-# 出来高チェック
-# ----------------------
-def volume_check(code):
-    try:
-        df = yf.Ticker(f"{code}.T").history(period="1mo")
-        v = df["Volume"]
-        if v.iloc[-1] > v.mean()*2:
-            return 2
-        elif v.iloc[-1] > v.mean():
-            return 1
-    except Exception as e:
-        print(f"{code} volume_checkエラー: {e}")
-    return 0
-
-# ----------------------
-# PER / PEG
-# ----------------------
-def valuation(code):
-    try:
-        info = yf.Ticker(f"{code}.T").info
-        per = info.get("trailingPE")
-        growth = info.get("earningsGrowth")
-        score = 0
-        if per:
-            if per < 20: score += 2
-            elif per < 40: score += 1
-        if growth and growth > 0:
-            peg = per / (growth*100)
-            if peg < 1: score += 1
-        return score
-    except Exception as e:
-        print(f"{code} valuationエラー: {e}")
-        return 0
-
-# ----------------------
-# PDF/進捗簡易スコア
-# ----------------------
-def pdf_score(code):
-    try:
-        url = f"https://irbank.net/{code}"
-        txt = requests.get(url, timeout=5).text
-        score = 0
-        if "進捗率" in txt: score += 2
-        if "上方修正" in txt: score += 2
-        return score
-    except Exception as e:
-        print(f"{code} pdf_scoreエラー: {e}")
-        return 0
-
-# ----------------------
-# 総合評価
-# ----------------------
-def evaluate(code):
-    score = trend_reversal(code) + volume_check(code) + valuation(code) + pdf_score(code)
-    if score >= 8:
-        rank = "◎"
-    elif score >= 5:
-        rank = "○"
-    elif score >= 3:
-        rank = "△"
-    else:
-        rank = "×"
-    return rank, score
-
-# ----------------------
-# CSVログ保存
-# ----------------------
-def save_log(results, target_date):
-    file_exists = os.path.isfile(LOG_FILE)
-    with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        if not file_exists:
-            writer.writerow(["date", "code", "rank", "score"])
-        for r in results:
-            writer.writerow([target_date, r[0], r[1], r[2]])
-
-# ----------------------
-# メイン処理
-# ----------------------
-def run_screening(target_date=None):
-    jst = pytz.timezone('Asia/Tokyo')
-    today = datetime.now(jst)
-    if target_date:
-        try:
-            target_dt = datetime.strptime(target_date, "%Y-%m-%d")
-        except:
-            print("日付形式エラー: YYYY-MM-DD で指定してください")
-            return
-    else:
-        target_dt = today
-
-    # Kabutanから決算銘柄取得
-    codes = get_codes()
-    if not codes:
-        send_line(f"{target_dt.strftime('%Y/%m/%d')} 本日有効な決算なし")
-        return
-
-    results = []
-    for c in codes:
-        rank, score = evaluate(c)
-        results.append((c, rank, score))
-    results.sort(key=lambda x: x[2], reverse=True)
-
-    # CSVログ保存
-    save_log(results, target_dt.strftime('%Y-%m-%d'))
-
-    # LINE通知
-    msg = f"【決算初動スクリーニング】★直後 {target_dt.strftime('%Y/%m/%d')}\n"
-    for r in results[:10]:
-        msg += f"{r[0]} {r[1]}({r[2]})\n"
-    send_line(msg)
-
-# ----------------------
-# 実行
-# ----------------------
-if __name__ == "__main__":
-    target_date = None
-    if len(sys.argv) > 1:
-        target_date = sys.argv[1]  # YYYY-MM-DD 形式
-    run_screening(target_date)
+jobs:
+  run-screening:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      - name: Run screening
+        run: |
+          python kabutan_final_full_run.py
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
