@@ -162,9 +162,7 @@ def weekly_ranking():
         for row in reader:
             code = row["code"]
             score = int(row["score"])
-            if code not in data:
-                data[code] = []
-            data[code].append(score)
+            data.setdefault(code, []).append(score)
     avg_scores = [(c, sum(v)/len(v)) for c,v in data.items()]
     avg_scores.sort(key=lambda x: x[1], reverse=True)
     msg = "【週間ランキング】\n"
@@ -202,9 +200,7 @@ def next_watchlist():
         for row in reader:
             code = row["code"]
             score = int(row["score"])
-            if code not in scores:
-                scores[code] = 0
-            scores[code] += score
+            scores[code] = scores.get(code,0)+score
     sorted_list = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     msg = "【来週監視銘柄】\n"
     for c,s in sorted_list[:10]:
@@ -219,18 +215,21 @@ def run_screening():
     today_wd = datetime.now(jst).weekday()
     codes = get_codes()
 
-    if today_wd >= 5:  # 土日 → 週まとめ
-        msg = "📊週次レポート\n\n"
+    # 土日 → 週次レポート
+    if today_wd >= 5:
+        msg = "📊【週次レポート】\n\n"
         msg += weekly_ranking()
         msg += win_rate()
         msg += next_watchlist()
         send_line(msg)
         return
 
+    # 平日で決算銘柄なし
     if not codes:
         send_line("本日有効な決算なし")
         return
 
+    # 平日決算初動スクリーニング
     results = []
     for c in codes:
         rank, score = evaluate(c)
@@ -238,10 +237,16 @@ def run_screening():
     results.sort(key=lambda x: x[2], reverse=True)
     save_log(results)
 
-    msg = "【決算初動スクリーニング】★直後\n"
+    msg = "📈【決算初動スクリーニング】★直後\n\n"
+    msg += "コード | ランク | スコア\n"
+    msg += "---|---|---\n"
     for r in results[:10]:
-        msg += f"{r[0]} {r[1]}({r[2]})\n"
+        msg += f"{r[0]} | {r[1]} | {r[2]}\n"
+
     send_line(msg)
 
+# ----------------------
+# 実行
+# ----------------------
 if __name__ == "__main__":
     run_screening()
