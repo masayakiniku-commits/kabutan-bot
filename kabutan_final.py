@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 import yfinance as yf
 import pandas as pd
 import pytz
+import sys
 
 LINE_TOKEN = os.getenv("LINE_TOKEN")
 LOG_FILE = "trade_log.csv"
@@ -78,10 +79,8 @@ def volume_check(code):
     try:
         df = yf.Ticker(f"{code}.T").history(period="1mo")
         v = df["Volume"]
-        if v.iloc[-1] > v.mean()*2:
-            return 2
-        elif v.iloc[-1] > v.mean():
-            return 1
+        if v.iloc[-1] > v.mean()*2: return 2
+        elif v.iloc[-1] > v.mean(): return 1
     except Exception as e:
         print(f"{code} volume_checkエラー: {e}")
     return 0
@@ -126,14 +125,10 @@ def pdf_score(code):
 # ----------------------
 def evaluate(code):
     score = trend_reversal(code) + volume_check(code) + valuation(code) + pdf_score(code)
-    if score >= 8:
-        rank = "◎"
-    elif score >= 5:
-        rank = "○"
-    elif score >= 3:
-        rank = "△"
-    else:
-        rank = "×"
+    if score >= 8: rank = "◎"
+    elif score >= 5: rank = "○"
+    elif score >= 3: rank = "△"
+    else: rank = "×"
     return rank, score
 
 # ----------------------
@@ -153,59 +148,80 @@ def save_log(results):
 # ----------------------
 # 週間ランキング
 # ----------------------
-def weekly_ranking():
-    if not os.path.exists(LOG_FILE):
-        return "データなし\n"
+def weekly_ranking(date_filter=None):
+    if not os.path.exists(LOG_FILE): return "データなし\n"
     data = {}
     with open(LOG_FILE, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if date_filter and row["date"] != date_filter: continue
             code = row["code"]
             score = int(row["score"])
             data.setdefault(code, []).append(score)
+    if not data: return "該当データなし\n"
     avg_scores = [(c, sum(v)/len(v)) for c,v in data.items()]
     avg_scores.sort(key=lambda x: x[1], reverse=True)
     msg = "【週間ランキング】\n"
-    for i, (c, s) in enumerate(avg_scores[:10]):
+    for i,(c,s) in enumerate(avg_scores[:10]):
         msg += f"{i+1}. {c} ({round(s,1)})\n"
     return msg + "\n"
 
 # ----------------------
 # 勝率分布
 # ----------------------
-def win_rate():
-    if not os.path.exists(LOG_FILE):
-        return "勝率データなし\n"
+def win_rate(date_filter=None):
+    if not os.path.exists(LOG_FILE): return "勝率データなし\n"
     count = {"◎":0,"○":0,"△":0,"×":0}
     with open(LOG_FILE, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if date_filter and row["date"] != date_filter: continue
             count[row["rank"]] += 1
     total = sum(count.values())
     msg = "【勝率分布】\n"
     for k,v in count.items():
-        if total > 0:
-            msg += f"{k}: {round(v/total*100,1)}%\n"
+        if total > 0: msg += f"{k}: {round(v/total*100,1)}%\n"
     return msg + "\n"
 
 # ----------------------
 # 来週監視銘柄
 # ----------------------
-def next_watchlist():
-    if not os.path.exists(LOG_FILE):
-        return "監視銘柄なし\n"
+def next_watchlist(date_filter=None):
+    if not os.path.exists(LOG_FILE): return "監視銘柄なし\n"
     scores = {}
     with open(LOG_FILE, encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
+            if date_filter and row["date"] != date_filter: continue
             code = row["code"]
             score = int(row["score"])
             scores[code] = scores.get(code,0)+score
     sorted_list = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     msg = "【来週監視銘柄】\n"
-    for c,s in sorted_list[:10]:
-        msg += f"{c}\n"
+    for c,s in sorted_list[:10]: msg += f"{c}\n"
     return msg
+
+# ----------------------
+# 過去日ログ通知
+# ----------------------
+def send_past_log(date_str):
+    if not os.path.exists(LOG_FILE):
+        send_line("ログファイルがありません")
+        return
+    data = []
+    with open(LOG_FILE, encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row["date"] == date_str:
+                data.append(f"{row['code']} {row['rank']}({row['score']})")
+    if not data:
+        send_line(f"{date_str} の有効な決算なし")
+        return
+    msg = f"【決算結果 {date_str}】\n" + "\n".join(data[:10])
+    msg += "\n" + weekly_ranking(date_str)
+    msg += win_rate(date_str)
+    msg += next_watchlist(date_str)
+    send_line(msg)
 
 # ----------------------
 # メイン処理
@@ -215,21 +231,18 @@ def run_screening():
     today_wd = datetime.now(jst).weekday()
     codes = get_codes()
 
-    # 土日 → 週次レポート
-    if today_wd >= 5:
-        msg = "📊【週次レポート】\n\n"
+    if today_wd >= 5:  # 土日 → 週まとめ
+        msg = "📊週次レポート\n\n"
         msg += weekly_ranking()
         msg += win_rate()
         msg += next_watchlist()
         send_line(msg)
         return
 
-    # 平日で決算銘柄なし
     if not codes:
         send_line("本日有効な決算なし")
         return
 
-    # 平日決算初動スクリーニング
     results = []
     for c in codes:
         rank, score = evaluate(c)
@@ -237,16 +250,21 @@ def run_screening():
     results.sort(key=lambda x: x[2], reverse=True)
     save_log(results)
 
-    msg = "📈【決算初動スクリーニング】★直後\n\n"
-    msg += "コード | ランク | スコア\n"
-    msg += "---|---|---\n"
+    msg = "【決算初動スクリーニング】★直後\n"
     for r in results[:10]:
-        msg += f"{r[0]} | {r[1]} | {r[2]}\n"
-
+        msg += f"{r[0]} {r[1]}({r[2]})\n"
+    msg += "\n" + weekly_ranking()
+    msg += win_rate()
+    msg += next_watchlist()
     send_line(msg)
 
 # ----------------------
 # 実行
 # ----------------------
 if __name__ == "__main__":
-    run_screening()
+    if len(sys.argv) > 1:
+        # 過去日指定
+        send_past_log(sys.argv[1])
+    else:
+        # 当日決算
+        run_screening()
