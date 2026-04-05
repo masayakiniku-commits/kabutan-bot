@@ -1,13 +1,12 @@
-name: Kabutan 決算通知
+name: Kabutan 決算通知 (Discord)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 毎日 UTC 0:00 (JST 9:00 に合わせる場合 UTC 0:00 で OK)
+    - cron: '0 0 * * *'  # 毎日 JST 9:00
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+  DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
 
 jobs:
   screening:
@@ -15,17 +14,17 @@ jobs:
 
     steps:
       - name: リポジトリチェックアウト
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Pythonセットアップ
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: 必要ライブラリインストール
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 yfinance pytz
+          pip install requests beautifulsoup4 yfinance pandas pytz
 
-      - name: スクリーニングスクリプト実行
-        run: python kabutan_final_full_run_notify.py
+      - name: スクリーニング実行
+        run: python kabutan_discord.py
